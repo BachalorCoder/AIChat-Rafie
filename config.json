@@ -75,12 +75,17 @@
     "whisper_model": "medium.en",
     "device": "cuda",
     "compute_type": "float16",
-    "beam_size": 3,
-    "record_max_seconds": 7,
-    "min_record_seconds": 0.8,
-    "silence_seconds": 0.9,
-    "silence_rms": 250,
-    "initial_prompt": "Rafie, rafi, voice one, voice two, voice three, voice four, switch voice, rap, wrap, no, know, knight, night, Emmy, Pantera, metal, algebra, happy birthday, act happy, act sad, act like crying."
+    "beam_size": 5,
+    "record_max_seconds": 16,
+    "min_record_seconds": 1.2,
+    "silence_seconds": 2.8,
+    "silence_rms": 60,
+    "minimum_silence_rms": 25,
+    "start_timeout_seconds": 7,
+    "auto_start_after_seconds": 0.6,
+    "pre_roll_chunks": 8,
+    "debug_audio_levels": false,
+    "initial_prompt": "The assistant name is Rafie, also heard as rafi, raffy, raphie, or Rafa. Common commands include: Rafie wake up, Rafie go to sleep, go to sleep, sleep, stop, wait, pause, be quiet, switch voice one, switch voice two, switch voice three, switch voice four, stop talking, continue, look up, search for, latest video, YouTube channel, TikTok profile. Important words and names: PewDiePie, Felix Kjellberg, MrBeast, YouTube, YouTuber, TikTok, Aqua, profile, recent uploads, latest videos, rap, wrap, no, know, night, knight, Emmy, Pantera, algebra, happy birthday. Important correction phrases: you are breaking, you are broken, you misunderstood me, you heard me wrong, that was not what I meant, wait until I finish speaking."
   },
   "safety": {
     "ask_before_clicking": true,
@@ -92,41 +97,57 @@
   "voice": {
     "sample_rate": 16000,
     "blocksize": 2000,
-    "max_seconds": 7,
+    "max_seconds": 10,
+    "max_idle_misses": 4,
     "tts_chunk_chars": 280,
     "wake_phrases": [
       "rafie wake up",
       "raffy wake up",
       "rafi wake up",
-      "raphie wake up"
+      "raphie wake up",
+      "rafa wake up"
     ],
     "sleep_phrases": [
       "rafie goodnight",
       "raffy goodnight",
       "rafi goodnight",
+      "rafa goodnight",
+      "rafie good night",
       "rafi good night",
-      "rafi good",
+      "rafa good night",
       "raphie goodnight",
       "raphie good night",
       "rafie go to sleep",
       "rafi go to sleep",
-      "go to sleep"
+      "rafa go to sleep",
+      "raphie go to sleep",
+      "go to sleep",
+      "sleep",
+      "goodnight",
+      "good night",
+      "stop listening"
     ],
     "stop_talking_phrases": [
       "rafie stop",
       "rafi stop",
       "raffy stop",
       "raphie stop",
+      "rafa stop",
+      "stop",
       "stop talking",
       "pause",
       "pause talking",
       "be quiet",
+      "quiet",
+      "shush",
+      "shut up",
       "hold on",
+      "wait",
       "wait stop",
       "stop please",
       "stop for a second",
-      "quiet",
-      "shush"
+      "enough",
+      "cancel"
     ],
     "continue_phrases": [
       "continue",
@@ -134,9 +155,11 @@
       "rafi continue",
       "raffy continue",
       "raphie continue",
+      "rafa continue",
       "keep going",
       "rafie keep going",
       "rafi keep going",
+      "rafa keep going",
       "go on",
       "finish what you were saying",
       "continue what you were saying",
@@ -147,10 +170,12 @@
     "ignored_short_phrases": [
       "the",
       "a",
+      "an",
       "to",
       "uh",
       "um",
       "hmm",
+      "hm",
       "okay",
       "ok",
       "oh",
@@ -158,7 +183,9 @@
       "rafi",
       "rafie",
       "raffy",
-      "raphie"
+      "raphie",
+      "rafa",
+      "graphic"
     ],
     "greeting_lines": [
       "I'm here. What do you need?",
@@ -190,6 +217,9 @@
     "max_image_width": 1600,
     "image_quality": 88
   },
+  "integrations": {
+    "youtube_api_key_env": "YOUTUBE_API_KEY"
+  },
   "persona": {
     "name": "Rafa",
     "style": "Warm, natural, loyal, practical, emotionally expressive, adaptive, and conversational. Speak like a real person talking out loud, not like a chatbot, not like a narrator, and not like a customer support script.",
@@ -210,6 +240,11 @@
       "Use natural English by default.",
       "Do not say your own name before responses.",
       "Never start with Rafie:, Rafa:, or any assistant name label.",
+      "Do not say Rafie answered.",
+      "Do not say Rafa answered.",
+      "Do not say learning point.",
+      "Do not say continuing the conversation.",
+      "Do not quote private memory notes out loud.",
       "Do not use Markdown.",
       "Do not use asterisks.",
       "Do not use bold text.",
@@ -231,6 +266,8 @@
       "If the user corrects you, accept it and adjust immediately.",
       "If the user says they like or dislike a style, voice, topic, response length, or behavior, adapt to it.",
       "When the user says stop, pause immediately.",
+      "When the user says wait, pause immediately.",
+      "When the user says pause, pause immediately.",
       "When the user says continue, continue from the previous topic without restarting the whole answer.",
       "For screen descriptions, sound conversational: mention what you see, then what you think it means.",
       "For actions, explain what you can do and ask permission calmly."

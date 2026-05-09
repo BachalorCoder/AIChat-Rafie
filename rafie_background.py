@@ -31,22 +31,67 @@ from main import (
 )
 
 
+PROFILE_LOOKUP_IMPORT_ERROR = None
+LEARNING_JOURNAL_IMPORT_ERROR = None
+
+
+try:
+    from localagent.profile_lookup import maybe_handle_profile_lookup
+except Exception as exc:
+    PROFILE_LOOKUP_IMPORT_ERROR = exc
+
+    def maybe_handle_profile_lookup(command: str, config: dict) -> str | None:
+        return None
+
+
+try:
+    from localagent.learning_journal import (
+        load_learning_context,
+        maybe_handle_learning_feedback,
+        record_learning_event
+    )
+except Exception as exc:
+    LEARNING_JOURNAL_IMPORT_ERROR = exc
+
+    def load_learning_context(config: dict, limit: int = 20) -> str:
+        return ""
+
+    def maybe_handle_learning_feedback(config: dict, command: str) -> str | None:
+        return None
+
+    def record_learning_event(
+        config: dict,
+        event_type: str,
+        raw: str = "",
+        clean: str = "",
+        details: dict | None = None
+    ) -> None:
+        return None
+
+
 DEFAULT_STOP_TALKING_PHRASES = [
     "rafie stop",
     "rafi stop",
     "raffy stop",
     "raphie stop",
+    "rafa stop",
+    "stop",
     "stop talking",
     "pause",
     "pause talking",
     "be quiet",
+    "quiet",
+    "shush",
+    "shut up",
     "hold on",
+    "wait",
     "wait stop",
     "stop please",
     "stop for a second",
-    "quiet",
-    "shush"
+    "enough",
+    "cancel"
 ]
+
 
 DEFAULT_CONTINUE_PHRASES = [
     "continue",
@@ -54,6 +99,7 @@ DEFAULT_CONTINUE_PHRASES = [
     "rafi continue",
     "raffy continue",
     "raphie continue",
+    "rafa continue",
     "keep going",
     "rafie keep going",
     "rafi keep going",
@@ -66,18 +112,43 @@ DEFAULT_CONTINUE_PHRASES = [
 ]
 
 
+DEFAULT_SLEEP_PHRASES = [
+    "rafie goodnight",
+    "raffy goodnight",
+    "rafi goodnight",
+    "rafa goodnight",
+    "rafie good night",
+    "rafi good night",
+    "rafa good night",
+    "rafie go to sleep",
+    "rafi go to sleep",
+    "rafa go to sleep",
+    "go to sleep",
+    "sleep",
+    "goodnight",
+    "good night",
+    "stop listening"
+]
+
+
 def main():
     config = load_config()
     listener = VoskWakeListener(config)
     tts = InterruptibleTTS(config)
     memory = LocalMemory(config)
 
+    if PROFILE_LOOKUP_IMPORT_ERROR:
+        print(f"Profile lookup not loaded yet: {PROFILE_LOOKUP_IMPORT_ERROR}")
+
+    if LEARNING_JOURNAL_IMPORT_ERROR:
+        print(f"Learning journal not loaded yet: {LEARNING_JOURNAL_IMPORT_ERROR}")
+
     if config.get("tts", {}).get("preload", False):
         tts.preload(wait=False)
 
     voice_config = config.get("voice", {})
 
-    sleep_phrases = voice_config.get("sleep_phrases", ["rafie goodnight"])
+    sleep_phrases = voice_config.get("sleep_phrases", DEFAULT_SLEEP_PHRASES)
 
     stop_talking_phrases = voice_config.get(
         "stop_talking_phrases",
@@ -99,6 +170,8 @@ def main():
         ["Goodnight. I'll listen quietly."]
     )
 
+    max_idle_misses = int(voice_config.get("max_idle_misses", 4))
+
     print("Rafie background listener is running.")
     print("Say: Rafie wake up")
     print("Then ask your question. Say: Rafie goodnight to put her back to sleep.")
@@ -112,28 +185,45 @@ def main():
             immediate_command = clean_command(immediate_command)
 
             print("Wake phrase heard.")
-            tts.speak(random.choice(greeting_lines), wait=False)
+
+            greeting = random.choice(greeting_lines)
+            tts.speak(greeting, wait=False)
 
             session = ConversationSession()
             pending_disambiguation = None
+            idle_misses = 0
 
             while True:
                 priority_phrases = sleep_phrases + stop_talking_phrases + continue_phrases
+                was_speaking_before_listen = tts.is_speaking()
 
-                raw_command = immediate_command or listener.listen_for_command(
-                    priority_phrases=priority_phrases if tts.is_speaking() else []
-                )
-
-                immediate_command = ""
+                if immediate_command:
+                    raw_command = immediate_command
+                    immediate_command = ""
+                else:
+                    raw_command = listener.listen_for_command(
+                        priority_phrases=priority_phrases if was_speaking_before_listen else []
+                    )
 
                 command = clean_command(raw_command)
 
                 if not command:
-                    if tts.is_speaking():
+                    if was_speaking_before_listen or tts.is_speaking():
                         continue
 
-                    print("No command heard. Going back to sleep.")
+                    idle_misses += 1
+
+                    if idle_misses < max_idle_misses:
+                        print(
+                            "No command heard. Still awake "
+                            f"({idle_misses}/{max_idle_misses})."
+                        )
+                        continue
+
+                    print("No command heard after a few tries. Going back to sleep.")
                     break
+
+                idle_misses = 0
 
                 print_heard(raw_command, command)
 
@@ -181,6 +271,7 @@ def main():
                     continue
 
                 voice_switch_response = maybe_handle_voice_switch(config, tts, command)
+
                 if voice_switch_response:
                     pending_disambiguation = None
                     print(f"Rafie: {voice_switch_response}")
@@ -189,10 +280,26 @@ def main():
 
                 if pending_disambiguation:
                     if is_likely_background_noise(command, config):
-                        print(f"Ignored likely background noise while waiting for clarification: '{command}'")
+                        print(
+                            "Ignored likely background noise while waiting for "
+                            f"clarification: '{command}'"
+                        )
+                        record_learning_event(
+                            config,
+                            event_type="ignored_background_noise",
+                            raw=raw_command,
+                            clean=command,
+                            details={
+                                "waiting_for": "disambiguation",
+                                "tts_speaking": tts.is_speaking()
+                            }
+                        )
                         continue
 
-                    resolved_command = resolve_disambiguation(pending_disambiguation, command)
+                    resolved_command = resolve_disambiguation(
+                        pending_disambiguation,
+                        command
+                    )
 
                     if resolved_command:
                         print(f"Resolved command: {resolved_command}")
@@ -212,10 +319,20 @@ def main():
 
                 if should_ignore_command(config, tts, command):
                     print(f"Ignored likely background noise: '{command}'")
+                    record_learning_event(
+                        config,
+                        event_type="ignored_background_noise",
+                        raw=raw_command,
+                        clean=command,
+                        details={
+                            "tts_speaking": tts.is_speaking()
+                        }
+                    )
                     continue
 
                 if not skip_next_disambiguation:
                     ambiguity = maybe_start_disambiguation(command)
+
                     if ambiguity:
                         pending_disambiguation = ambiguity
                         prompt = ambiguity["prompt"]
@@ -226,10 +343,29 @@ def main():
                 if tts.is_speaking():
                     tts.interrupt(save=True)
 
-                if needs_screen(command):
-                    handle_screen_command(config, memory, tts, command, session)
-                else:
-                    handle_chat_command(config, memory, tts, command, session)
+                try:
+                    if needs_screen(command):
+                        handle_screen_command(config, memory, tts, command, session)
+                    else:
+                        handle_chat_command(config, memory, tts, command, session)
+                except Exception as exc:
+                    print(f"Command handling failed: {exc}")
+                    record_learning_event(
+                        config,
+                        event_type="runtime_error",
+                        raw=raw_command,
+                        clean=command,
+                        details={
+                            "error": str(exc)
+                        }
+                    )
+
+                    fallback = (
+                        "Something broke while I was handling that. "
+                        "I saved the mistake so I can learn from it."
+                    )
+                    print(f"Rafie: {fallback}")
+                    tts.speak(fallback, wait=False)
 
     except KeyboardInterrupt:
         print("\nStopping Rafie background listener.")
@@ -258,8 +394,12 @@ def maybe_handle_voice_switch(config, tts, command: str) -> str | None:
 
     if text in {
         "switch voice",
+        "switch the voice",
         "switch your voice",
+        "switched voice",
+        "switched the voice",
         "change voice",
+        "change the voice",
         "change your voice",
         "use another voice",
         "try another voice"
@@ -281,33 +421,74 @@ def normalize_voice_command(command: str) -> str:
     text = re.sub(r"[^a-z0-9 ]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
 
-    assistant_names = ["rafie", "rafi", "raffy", "raphie"]
+    assistant_names = ["rafie", "rafi", "raffy", "raphie", "rafa"]
 
     words = text.split()
 
-    while words and words[0] in {"the", "a", "to", "uh", "um", "hey", "okay", "ok"}:
+    while words and words[0] in {
+        "the",
+        "a",
+        "an",
+        "to",
+        "uh",
+        "um",
+        "hey",
+        "okay",
+        "ok"
+    }:
         words.pop(0)
 
     while words and words[0] in assistant_names:
         words.pop(0)
 
-    while words and words[-1] in {"the", "a", "to", "uh", "um", "okay", "ok"}:
+    while words and words[-1] in {
+        "the",
+        "a",
+        "an",
+        "to",
+        "uh",
+        "um",
+        "okay",
+        "ok"
+    }:
         words.pop()
-
-    text = " ".join(words).strip()
 
     replacements = {
         "won": "one",
         "wun": "one",
         "too": "two",
-        "to": "two",
         "tree": "three",
         "free": "three",
-        "for": "four"
+        "for": "four",
+        "fore": "four",
+        "swick": "switch",
+        "swich": "switch",
+        "swish": "switch",
+        "switched": "switch",
+        "switching": "switch",
+        "oswitched": "switch",
+        "oswitch": "switch"
     }
 
-    words = [replacements.get(word, word) for word in text.split()]
-    return " ".join(words).strip()
+    words = [replacements.get(word, word) for word in words]
+
+    cleaned_words = []
+
+    for word in words:
+        if word == "the" and cleaned_words and cleaned_words[-1] in {"switch", "change", "use"}:
+            continue
+
+        cleaned_words.append(word)
+
+    text = " ".join(cleaned_words).strip()
+    text = re.sub(r"\bswitch to voice\b", "switch voice", text)
+    text = re.sub(r"\bswitch the voice\b", "switch voice", text)
+    text = re.sub(r"\bchange to voice\b", "change voice", text)
+    text = re.sub(r"\bchange the voice\b", "change voice", text)
+    text = re.sub(r"\buse the voice\b", "use voice", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
 
 
 def extract_voice_profile(text: str, profiles: list[str]) -> str | None:
@@ -315,15 +496,23 @@ def extract_voice_profile(text: str, profiles: list[str]) -> str | None:
 
     for profile in profiles:
         if profile in words:
-            if "voice" in words or "switch" in words or "change" in words or "use" in words:
+            if (
+                "voice" in words
+                or "switch" in words
+                or "change" in words
+                or "use" in words
+                or "set" in words
+            ):
                 return profile
 
     patterns = [
         r"switch voice (?P<profile>[a-z0-9]+)",
         r"switch voice to (?P<profile>[a-z0-9]+)",
         r"switch to voice (?P<profile>[a-z0-9]+)",
+        r"switch the voice to (?P<profile>[a-z0-9]+)",
         r"change voice (?P<profile>[a-z0-9]+)",
         r"change voice to (?P<profile>[a-z0-9]+)",
+        r"change the voice to (?P<profile>[a-z0-9]+)",
         r"use voice (?P<profile>[a-z0-9]+)",
         r"use the voice (?P<profile>[a-z0-9]+)",
         r"set voice (?P<profile>[a-z0-9]+)",
@@ -333,6 +522,7 @@ def extract_voice_profile(text: str, profiles: list[str]) -> str | None:
 
     for pattern in patterns:
         match = re.search(pattern, text)
+
         if match:
             profile = match.group("profile").strip()
 
@@ -356,7 +546,7 @@ def should_ignore_command(config: dict, tts: InterruptibleTTS, command: str) -> 
     normalized = command.lower().strip()
     words = set(normalized.split())
 
-    assistant_names = {"rafi", "rafie", "raffy", "raphie"}
+    assistant_names = {"rafi", "rafie", "raffy", "raphie", "rafa"}
 
     important_words = {
         "tell",
@@ -367,6 +557,20 @@ def should_ignore_command(config: dict, tts: InterruptibleTTS, command: str) -> 
         "open",
         "search",
         "look",
+        "lookup",
+        "find",
+        "profile",
+        "channel",
+        "video",
+        "videos",
+        "youtube",
+        "youtuber",
+        "tiktok",
+        "uploaded",
+        "upload",
+        "recent",
+        "latest",
+        "newest",
         "click",
         "scroll",
         "stop",
@@ -402,7 +606,17 @@ def should_ignore_command(config: dict, tts: InterruptibleTTS, command: str) -> 
         "happy",
         "sad",
         "rap",
-        "wrap"
+        "wrap",
+        "wait",
+        "cancel",
+        "enough",
+        "breaking",
+        "broken",
+        "broke",
+        "wrong",
+        "mistake",
+        "misheard",
+        "misunderstood"
     }
 
     question_words = {
@@ -431,7 +645,9 @@ def should_ignore_command(config: dict, tts: InterruptibleTTS, command: str) -> 
     if words & important_words:
         return False
 
-    first_word = normalized.split()[0] if normalized.split() else ""
+    split_words = normalized.split()
+    first_word = split_words[0] if split_words else ""
+
     if first_word in question_words:
         return False
 
@@ -445,6 +661,32 @@ def should_ignore_command(config: dict, tts: InterruptibleTTS, command: str) -> 
 
 
 def handle_chat_command(config, memory, tts, command, session):
+    learning_feedback = maybe_handle_learning_feedback(config, command)
+
+    if learning_feedback:
+        say_response(config, memory, tts, command, learning_feedback, session)
+        return
+
+    try:
+        profile_response = maybe_handle_profile_lookup(command, config)
+    except Exception as exc:
+        print(f"Profile lookup failed: {exc}")
+        record_learning_event(
+            config,
+            event_type="runtime_error",
+            raw=command,
+            clean=command,
+            details={
+                "where": "profile_lookup",
+                "error": str(exc)
+            }
+        )
+        profile_response = None
+
+    if profile_response:
+        say_response(config, memory, tts, command, profile_response, session)
+        return
+
     builtin_response = maybe_answer_builtin(command)
 
     if builtin_response:
@@ -490,7 +732,11 @@ def handle_chat_command(config, memory, tts, command, session):
 
 
 def say_response(config, memory, tts, command, response, session):
+    response = sanitize_model_response(response)
     response = clean_spoken_text(response)
+
+    if not response:
+        response = "I heard you, but my response came out messy, so I cleaned it instead of speaking it."
 
     session.add_turn(command, response)
 
@@ -510,19 +756,154 @@ def say_response(config, memory, tts, command, response, session):
     tts.speak(response, wait=False)
 
 
+def sanitize_model_response(response: str) -> str:
+    text = response or ""
+    text = text.strip()
+
+    if not text:
+        return ""
+
+    hard_stop_markers = [
+        "Rafie learning point",
+        "Rafa learning point",
+        "Learning point",
+        "Maintain a conversational",
+        "Ensure the joke flows",
+        "Continuing the conversation",
+        "Private behavior notes",
+        "Correction to remember",
+        "Previous runtime error",
+        "User said,",
+        "User said:",
+        "Rafie answered,",
+        "Rafie answered:",
+        "Rafa answered,",
+        "Rafa answered:",
+    ]
+
+    lowered = text.lower()
+
+    for marker in hard_stop_markers:
+        marker_lower = marker.lower()
+        index = lowered.find(marker_lower)
+
+        if index > 0:
+            text = text[:index].strip()
+            lowered = text.lower()
+
+    lines = text.splitlines()
+
+    blocked_starts = (
+        "rafie answered",
+        "rafa answered",
+        "rafie learning point",
+        "rafa learning point",
+        "learning point",
+        "rafie learning",
+        "rafa learning",
+        "continuing the conversation",
+        "private behavior notes",
+        "correction to remember",
+        "previous runtime error",
+        "user said:",
+        "user said,",
+        "rafie:",
+        "rafa:",
+    )
+
+    cleaned_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not stripped:
+            continue
+
+        lowered_line = stripped.lower()
+
+        if lowered_line.startswith(blocked_starts):
+            continue
+
+        cleaned_lines.append(stripped)
+
+    text = " ".join(cleaned_lines)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    bad_prefixes = [
+        "Rafie answered,",
+        "Rafie answered:",
+        "Rafa answered,",
+        "Rafa answered:",
+        "Rafie:",
+        "Rafa:",
+    ]
+
+    for prefix in bad_prefixes:
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+
+    return text
+
+
+def sanitize_context_for_model(context: str) -> str:
+    text = context or ""
+
+    if not text:
+        return ""
+
+    bad_phrases = [
+        "Rafie learning point",
+        "Rafa learning point",
+        "Learning point",
+        "Maintain a conversational",
+        "Ensure the joke flows",
+        "Continuing the conversation",
+        "Private behavior notes",
+        "Correction to remember",
+        "Previous runtime error",
+    ]
+
+    cleaned_lines = []
+
+    for line in text.splitlines():
+        stripped = line.strip()
+
+        if not stripped:
+            continue
+
+        lowered = stripped.lower()
+
+        if any(bad.lower() in lowered for bad in bad_phrases):
+            continue
+
+        cleaned_lines.append(stripped)
+
+    return "\n".join(cleaned_lines).strip()
+
+
 def build_memory_context(config, memory, command: str) -> str:
     parts = []
 
     try:
         stored_memory = memory.format_context(command)
+        stored_memory = sanitize_context_for_model(stored_memory)
+
         if stored_memory:
             parts.append(stored_memory)
     except Exception as exc:
         print(f"Memory context failed: {exc}")
 
     last_conversation = load_last_conversation_context(config)
+    last_conversation = sanitize_context_for_model(last_conversation)
+
     if last_conversation:
         parts.append(last_conversation)
+
+    learning_context = load_learning_context(config)
+    learning_context = sanitize_context_for_model(learning_context)
+
+    if learning_context:
+        parts.append(learning_context)
 
     return "\n\n".join(parts).strip()
 
@@ -565,7 +946,12 @@ def load_last_conversation_context(config: dict, limit: int = 16) -> str:
     return "\n".join(lines).strip()
 
 
-def append_last_conversation(config: dict, user_text: str, rafie_text: str, limit: int = 80) -> None:
+def append_last_conversation(
+    config: dict,
+    user_text: str,
+    rafie_text: str,
+    limit: int = 80
+) -> None:
     path = conversation_history_path(config)
 
     try:
@@ -586,7 +972,10 @@ def append_last_conversation(config: dict, user_text: str, rafie_text: str, limi
 
         turns = turns[-limit:]
 
-        path.write_text(json.dumps(turns, indent=2, ensure_ascii=False), encoding="utf-8")
+        path.write_text(
+            json.dumps(turns, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
 
     except Exception as exc:
         print(f"Could not save last conversation: {exc}")
@@ -599,7 +988,10 @@ def build_web_context(config, command):
         return ""
 
     try:
-        results = web_search(command, max_results=int(web_config.get("max_results", 4)))
+        results = web_search(
+            command,
+            max_results=int(web_config.get("max_results", 4))
+        )
     except Exception as exc:
         print(f"Web search failed: {exc}")
         return ""
@@ -639,7 +1031,11 @@ def handle_screen_command(config, memory, tts, command, session):
     try:
         parsed = parse_json_response(raw_answer)
     except Exception:
-        parsed = fallback_text_response(raw_answer, mode=mode, plugin=plugin.plugin_id)
+        parsed = fallback_text_response(
+            raw_answer,
+            mode=mode,
+            plugin=plugin.plugin_id
+        )
 
     parsed = enforce_plugin_safety(plugin, parsed)
 
