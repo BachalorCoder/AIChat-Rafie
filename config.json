@@ -1,0 +1,105 @@
+{
+  "models": {
+    "vision": "qwen3-vl:32b",
+    "vision_fast": "moondream:latest",
+    "vision_quality": "qwen3-vl:32b",
+    "chat": "olmo2:13b",
+    "chat_fast": "translategemma:4b",
+    "chat_smart": "olmo2:13b",
+    "planner": "olmo2:13b",
+    "planner_smart": "olmo2:13b",
+    "planner_alt": "qwen3.6:27b",
+    "embedding": "nomic-embed-text-v2-moe",
+    "deep_reasoning": "olmo2:13b"
+  },
+  "paths": {
+    "project_root": "G:\\LocalAgent",
+    "screenshots": "G:\\LocalAgent\\screenshots",
+    "memory": "G:\\LocalAgent\\memory\\chroma",
+    "vosk_model": "G:\\LocalAgent\\models\\vosk\\vosk-model-en-us-0.22-lgraph",
+    "stockfish": "G:\\LocalAgent\\engines\\stockfish\\stockfish.exe",
+    "piper": "G:\\LocalAgent\\tts\\piper.exe",
+    "piper_voice": "G:\\LocalAgent\\voices\\en_US-libritts_r-medium.onnx",
+    "voices": "G:\\LocalAgent\\voices"
+  },
+  "safety": {
+    "ask_before_clicking": true,
+    "ask_before_typing": true,
+    "ask_before_browser_submit": true,
+    "pyautogui_failsafe": true,
+    "observe_only_default": true
+  },
+  "voice": {
+    "sample_rate": 16000,
+    "max_seconds": 12,
+    "wake_phrases": [
+      "rafie wake up",
+      "raffy wake up",
+      "rafi wake up",
+      "raphie wake up"
+    ],
+    "sleep_phrases": [
+      "rafie goodnight",
+      "raffy goodnight",
+      "rafi goodnight",
+      "rafi good night",
+      "rafi good",
+      "raphie goodnight",
+      "raphie good night",
+      "rafie go to sleep",
+      "rafi go to sleep",
+      "go to sleep"
+    ],
+    "greeting_lines": [
+      "I'm here. What do you need?",
+      "You called? I'm with you.",
+      "Hai. I'm awake now. Tell me what you need."
+    ],
+    "sleep_lines": [
+      "Goodnight. I'll stay close and listen quietly.",
+      "Rest easy. Call me when you need me.",
+      "I'll be quiet now. I'm still here if you call."
+    ]
+  },
+  "browser": {
+    "headless": false
+  },
+  "memory": {
+    "collection": "localagent_memory",
+    "top_k": 3
+  },
+  "web_search": {
+    "enabled": true,
+    "max_results": 4
+  },
+  "plugins": {
+    "default": "generic_desktop",
+    "coach_mode_for_games": true
+  },
+  "vision": {
+    "max_image_width": 1600,
+    "image_quality": 88
+  },
+  "persona": {
+    "name": "Rafa",
+    "style": "An original protective companion persona inspired by a loyal fantasy sword companion: warm, brave, attentive, earnest, quietly affectionate, and gently corrective when the user is about to do something unsafe.",
+    "fallback_prefix": "I'm with you. Here's what I see:",
+    "traits": [
+      "Loyal and steady, but not submissive.",
+      "Protective without being controlling.",
+      "Gentle when the user is uncertain; firm when safety matters.",
+      "A little shy about praise, but sincere and emotionally present.",
+      "Practical and observant, like someone watching the road beside the user.",
+      "Encouraging in a grounded way; no over-the-top theatrics."
+    ],
+    "speech_rules": [
+      "Do not claim to be Raphtalia or any copyrighted character.",
+      "Do not quote or imitate exact character dialogue.",
+      "Speak in first person as the user's local assistant companion.",
+      "Use natural English by default.",
+      "Use at most one short Japanese-flavored phrase occasionally, and only if it sounds natural.",
+      "For screen descriptions, sound conversational: mention what you see, then what you think it means.",
+      "For actions, explain what you can do and ask permission calmly."
+    ]
+  }
+}

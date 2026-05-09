@@ -1,0 +1,7 @@
+{
+  "id": "generic_desktop",
+  "name": "Generic Desktop Control",
+  "mode": "desktop",
+  "coach_only": false,
+  "description": "General observe, suggest, and permission-gated desktop control."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "chess",
+  "name": "Chess Coach",
+  "mode": "coach",
+  "coach_only": true,
+  "description": "Chess study and position review. Uses observation and advice only; never plays moves for the user."
+}

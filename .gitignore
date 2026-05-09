@@ -1,0 +1,26 @@
+cat > .gitignore <<'EOF'
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.env
+.env.*
+*.log
+
+memory/
+screenshots/
+
+models/
+tts/
+voices/
+
+.refs/
+
+*.wav
+*.onnx
+*.ort
+*.dll
+*.exe
+EOF

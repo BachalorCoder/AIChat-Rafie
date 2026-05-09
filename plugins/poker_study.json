@@ -1,0 +1,7 @@
+{
+  "id": "poker_study",
+  "name": "Poker Study",
+  "mode": "coach",
+  "coach_only": true,
+  "description": "Poker hand review and study support. Avoids live online/real-money action advice."
+}

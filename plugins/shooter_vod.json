@@ -1,0 +1,7 @@
+{
+  "id": "shooter_vod",
+  "name": "Shooter VOD Review",
+  "mode": "coach",
+  "coach_only": true,
+  "description": "Shooter gameplay VOD review for positioning, timing, crosshair placement, and decision making. No automation or cheating help."
+}

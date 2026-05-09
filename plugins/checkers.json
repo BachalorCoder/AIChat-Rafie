@@ -1,0 +1,7 @@
+{
+  "id": "checkers",
+  "name": "Checkers Coach",
+  "mode": "coach",
+  "coach_only": true,
+  "description": "Checkers and draughts coaching. Gives plans, tactics, and board review without controlling the computer."
+}
