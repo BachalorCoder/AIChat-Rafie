@@ -12,6 +12,14 @@
     "embedding": "nomic-embed-text-v2-moe",
     "deep_reasoning": "olmo2:13b"
   },
+  "generation": {
+    "num_predict": 300,
+    "num_predict_long": 800,
+    "num_ctx": 4096,
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "keep_alive": "30m"
+  },
   "paths": {
     "project_root": "G:\\LocalAgent",
     "screenshots": "G:\\LocalAgent\\screenshots",
@@ -31,6 +39,7 @@
   },
   "voice": {
     "sample_rate": 16000,
+    "blocksize": 4000,
     "max_seconds": 12,
     "wake_phrases": [
       "rafie wake up",
@@ -49,6 +58,42 @@
       "rafie go to sleep",
       "rafi go to sleep",
       "go to sleep"
+    ],
+    "stop_talking_phrases": [
+      "rafie stop",
+      "rafi stop",
+      "stop talking",
+      "pause",
+      "pause talking",
+      "be quiet",
+      "hold on",
+      "wait stop"
+    ],
+    "continue_phrases": [
+      "continue",
+      "keep going",
+      "go on",
+      "finish what you were saying",
+      "continue what you were saying",
+      "continue about"
+    ],
+    "ignored_short_phrases": [
+      "the",
+      "a",
+      "to",
+      "uh",
+      "um",
+      "hmm",
+      "okay",
+      "ok",
+      "yeah",
+      "yes",
+      "no",
+      "oh",
+      "oh my god",
+      "rafi",
+      "rafie",
+      "raffy"
     ],
     "greeting_lines": [
       "I'm here. What do you need?",
@@ -97,6 +142,9 @@
       "Do not quote or imitate exact character dialogue.",
       "Speak in first person as the user's local assistant companion.",
       "Use natural English by default.",
+      "Do not say your own name before responses.",
+      "Do not use Markdown, asterisks, bold text, bullet labels, or stage directions.",
+      "Do not say things like concerned, smiles warmly, or chuckles softly as text.",
       "Use at most one short Japanese-flavored phrase occasionally, and only if it sounds natural.",
       "For screen descriptions, sound conversational: mention what you see, then what you think it means.",
       "For actions, explain what you can do and ask permission calmly."

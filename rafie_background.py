@@ -8,10 +8,15 @@ from localagent.memory_store import LocalMemory
 from localagent.preferences import maybe_handle_preference
 from localagent.plugins import detect_plugin, enforce_plugin_safety, plugin_context
 from localagent.session_state import ConversationSession
-from localagent.tts_manager import InterruptibleTTS
-from localagent.transcript import clean_command
+from localagent.transcript import clean_command, is_likely_background_noise
+from localagent.tts_manager import InterruptibleTTS, clean_spoken_text
 from localagent.wake_listener import VoskWakeListener, contains_phrase
-from localagent.web_search import format_web_context, needs_web_search, response_seems_uncertain, web_search
+from localagent.web_search import (
+    format_web_context,
+    needs_web_search,
+    response_seems_uncertain,
+    web_search,
+)
 from main import (
     ask_vision_model,
     build_spoken_response,
@@ -22,13 +27,37 @@ from main import (
 )
 
 
+DEFAULT_STOP_TALKING_PHRASES = [
+    "rafie stop",
+    "rafi stop",
+    "stop talking",
+    "pause",
+    "pause talking",
+    "be quiet",
+    "hold on",
+    "wait stop",
+]
+
+DEFAULT_CONTINUE_PHRASES = [
+    "continue",
+    "keep going",
+    "go on",
+    "finish what you were saying",
+    "continue what you were saying",
+    "continue about",
+]
+
+
 def main():
     config = load_config()
     listener = VoskWakeListener(config)
     tts = InterruptibleTTS(config)
     memory = LocalMemory(config)
+
     voice_config = config.get("voice", {})
     sleep_phrases = voice_config.get("sleep_phrases", ["rafie goodnight"])
+    stop_talking_phrases = voice_config.get("stop_talking_phrases", DEFAULT_STOP_TALKING_PHRASES)
+    continue_phrases = voice_config.get("continue_phrases", DEFAULT_CONTINUE_PHRASES)
     greeting_lines = voice_config.get("greeting_lines", ["I'm here. What do you need?"])
     sleep_lines = voice_config.get("sleep_lines", ["Goodnight. I'll listen quietly."])
 
@@ -42,8 +71,10 @@ def main():
             print("\nSleeping. Waiting for wake phrase...")
             immediate_command = listener.wait_for_wake()
             immediate_command = clean_command(immediate_command)
+
             print("Wake phrase heard.")
-            tts.speak(random.choice(greeting_lines), wait=True)
+            tts.speak(random.choice(greeting_lines), wait=False)
+
             session = ConversationSession()
 
             while True:
@@ -52,20 +83,44 @@ def main():
                 command = clean_command(raw_command)
 
                 if not command:
+                    if tts.is_speaking():
+                        continue
                     print("No command heard. Going back to sleep.")
                     break
 
-                if raw_command.strip() and raw_command.strip() != command:
-                    print(f"Heard raw: {raw_command}")
-                    print(f"Cleaned: {command}")
-                else:
-                    print(f"Heard: {command}")
+                print_heard(raw_command, command)
 
-                if contains_phrase(raw_command, sleep_phrases) or contains_phrase(command, sleep_phrases):
+                is_sleep = bool(contains_phrase(raw_command, sleep_phrases) or contains_phrase(command, sleep_phrases))
+                is_stop = bool(contains_phrase(raw_command, stop_talking_phrases) or contains_phrase(command, stop_talking_phrases))
+                is_continue = bool(contains_phrase(raw_command, continue_phrases) or contains_phrase(command, continue_phrases))
+
+                if not (is_sleep or is_stop or is_continue) and should_ignore_command(config, tts, command):
+                    print(f"Ignored likely background noise: '{command}'")
+                    continue
+
+                if is_sleep:
+                    tts.interrupt(save=False)
                     line = random.choice(sleep_lines)
                     print(line)
                     tts.speak(line, wait=True)
                     break
+
+                if is_stop:
+                    tts.interrupt(save=True)
+                    print("Speech paused.")
+                    continue
+
+                if is_continue:
+                    if tts.continue_speaking(wait=False):
+                        print("Speech continued.")
+                        continue
+
+                    continue_command = make_continue_command(command)
+                    handle_chat_command(config, memory, tts, continue_command, session)
+                    continue
+
+                if tts.is_speaking():
+                    tts.interrupt(save=True)
 
                 if needs_screen(command):
                     handle_screen_command(config, memory, tts, command, session)
@@ -78,8 +133,37 @@ def main():
         tts.stop()
 
 
+def print_heard(raw_command: str, command: str) -> None:
+    raw = (raw_command or "").strip()
+    if raw and raw != command:
+        print(f"Heard raw: {raw_command}")
+        print(f"Cleaned: {command}")
+    else:
+        print(f"Heard: {command}")
+
+
+def should_ignore_command(config: dict, tts: InterruptibleTTS, command: str) -> bool:
+    if is_likely_background_noise(command, config):
+        return True
+
+    if tts.is_speaking() and tts.looks_like_echo(command):
+        return True
+
+    return False
+
+
+def make_continue_command(command: str) -> str:
+    command = command.strip()
+
+    if command in {"continue", "keep going", "go on"}:
+        return "Continue your previous answer. Add the next useful part without repeating yourself."
+
+    return f"Continue the previous topic based on this request: {command}"
+
+
 def handle_chat_command(config, memory, tts, command, session):
     builtin_response = maybe_answer_builtin(command)
+
     if builtin_response:
         response = builtin_response
     else:
@@ -87,32 +171,55 @@ def handle_chat_command(config, memory, tts, command, session):
         response = math_response
 
     if response:
-        pass
-    else:
-        preference_response = maybe_handle_preference(command, memory)
-        if preference_response:
-            response = preference_response
-            session.add_turn(command, response)
-            print(f"Rafie: {response}")
-            tts.speak(response, wait=True)
-            return
+        say_response(config, memory, tts, command, response, session)
+        return
 
-        memory_context = memory.format_context(command)
-        web_context = build_web_context(config, command) if needs_web_search(command) else ""
-        response = answer_chat(config, command, memory_context, session=session, web_context=web_context)
+    preference_response = maybe_handle_preference(command, memory)
+    if preference_response:
+        say_response(config, memory, tts, command, preference_response, session)
+        return
 
-        if response_seems_uncertain(response):
-            web_context = build_web_context(config, command)
-            if web_context:
-                response = answer_chat(config, command, memory_context, session=session, web_context=web_context)
+    memory_context = memory.format_context(command)
+    web_context = build_web_context(config, command) if needs_web_search(command) else ""
+
+    response = answer_chat(
+        config,
+        command,
+        memory_context,
+        session=session,
+        web_context=web_context,
+    )
+
+    if response_seems_uncertain(response):
+        web_context = build_web_context(config, command)
+        if web_context:
+            response = answer_chat(
+                config,
+                command,
+                memory_context,
+                session=session,
+                web_context=web_context,
+            )
+
+    say_response(config, memory, tts, command, response, session)
+
+
+def say_response(config, memory, tts, command, response, session):
+    response = clean_spoken_text(response)
 
     session.add_turn(command, response)
     print(f"Rafie: {response}")
+
     memory.add(
         f"User said: {command}\nRafie answered: {response}",
-        {"source": "background_voice", "mode": "chat", "plugin": "conversation"},
+        {
+            "source": "background_voice",
+            "mode": "chat",
+            "plugin": "conversation",
+        },
     )
-    tts.speak(response, wait=True)
+
+    tts.speak(response, wait=False)
 
 
 def build_web_context(config, command):
@@ -137,8 +244,10 @@ def build_web_context(config, command):
 def handle_screen_command(config, memory, tts, command, session):
     plugin = detect_plugin(command)
     mode = "coach" if plugin.coach_only else plugin.mode
+
     memory_context = memory.format_context(command)
     extra_context = plugin_context(plugin, command, config)
+
     screenshot_path, model_screenshot_path = take_screenshot(config)
     print(f"Screenshot saved: {screenshot_path}")
     print(f"Model image: {model_screenshot_path}")
@@ -160,11 +269,13 @@ def handle_screen_command(config, memory, tts, command, session):
         parsed = fallback_text_response(raw_answer, mode=mode, plugin=plugin.plugin_id)
 
     parsed = enforce_plugin_safety(plugin, parsed)
+
     print_agent_response(raw_answer, parsed, config)
     maybe_remember(memory, command, parsed)
-    spoken = build_spoken_response(parsed, config)
+
+    spoken = clean_spoken_text(build_spoken_response(parsed, config))
     session.add_turn(command, spoken)
-    tts.speak(spoken, wait=True)
+    tts.speak(spoken, wait=False)
 
 
 if __name__ == "__main__":
