@@ -13,8 +13,8 @@
     "deep_reasoning": "olmo2:13b"
   },
   "generation": {
-    "num_predict": 300,
-    "num_predict_long": 800,
+    "num_predict": 180,
+    "num_predict_long": 650,
     "num_ctx": 4096,
     "temperature": 0.6,
     "top_p": 0.9,
@@ -28,7 +28,59 @@
     "stockfish": "G:\\LocalAgent\\engines\\stockfish\\stockfish.exe",
     "piper": "G:\\LocalAgent\\tts\\piper.exe",
     "piper_voice": "G:\\LocalAgent\\voices\\en_US-libritts_r-medium.onnx",
-    "voices": "G:\\LocalAgent\\voices"
+    "voices": "G:\\LocalAgent\\voices",
+    "voice_reference": "G:\\LocalAgent\\voices\\rafie_one.wav"
+  },
+  "tts": {
+    "engine": "chatterbox_turbo",
+    "fallback_engine": "piper",
+    "device": "cuda",
+    "preload": true,
+    "quiet": true,
+    "voice_profile": "one",
+    "chunk_chars": 280,
+    "exaggeration": 0.45,
+    "cfg_weight": 0.35,
+    "voice_reference": "G:\\LocalAgent\\voices\\rafie_one.wav",
+    "voice_profiles": {
+      "one": {
+        "voice_reference": "G:\\LocalAgent\\voices\\rafie_one.wav",
+        "exaggeration": 0.45,
+        "cfg_weight": 0.35,
+        "chunk_chars": 280
+      },
+      "two": {
+        "voice_reference": "G:\\LocalAgent\\voices\\rafie_two.wav",
+        "exaggeration": 0.45,
+        "cfg_weight": 0.35,
+        "chunk_chars": 280
+      },
+      "three": {
+        "voice_reference": "G:\\LocalAgent\\voices\\rafie_three.wav",
+        "exaggeration": 0.45,
+        "cfg_weight": 0.35,
+        "chunk_chars": 280
+      },
+      "four": {
+        "voice_reference": "G:\\LocalAgent\\voices\\rafie_four.wav",
+        "exaggeration": 0.45,
+        "cfg_weight": 0.35,
+        "chunk_chars": 280
+      }
+    }
+  },
+  "stt": {
+    "wake_engine": "vosk",
+    "command_engine": "whisper",
+    "whisper_model": "medium.en",
+    "device": "cuda",
+    "compute_type": "float16",
+    "beam_size": 3,
+    "record_max_seconds": 7,
+    "min_record_seconds": 0.8,
+    "silence_seconds": 0.9,
+    "silence_rms": 250,
+    "initial_prompt": "Rafie, rafi, voice one, voice two, voice three, voice four, switch voice, rap, wrap, no, know, knight, night, Emmy, Pantera, metal, algebra, happy birthday, act happy, act sad, act like crying."
   },
   "safety": {
     "ask_before_clicking": true,
@@ -39,8 +91,9 @@
   },
   "voice": {
     "sample_rate": 16000,
-    "blocksize": 4000,
-    "max_seconds": 12,
+    "blocksize": 2000,
+    "max_seconds": 7,
+    "tts_chunk_chars": 280,
     "wake_phrases": [
       "rafie wake up",
       "raffy wake up",
@@ -62,20 +115,34 @@
     "stop_talking_phrases": [
       "rafie stop",
       "rafi stop",
+      "raffy stop",
+      "raphie stop",
       "stop talking",
       "pause",
       "pause talking",
       "be quiet",
       "hold on",
-      "wait stop"
+      "wait stop",
+      "stop please",
+      "stop for a second",
+      "quiet",
+      "shush"
     ],
     "continue_phrases": [
       "continue",
+      "rafie continue",
+      "rafi continue",
+      "raffy continue",
+      "raphie continue",
       "keep going",
+      "rafie keep going",
+      "rafi keep going",
       "go on",
       "finish what you were saying",
       "continue what you were saying",
-      "continue about"
+      "continue about",
+      "say the rest",
+      "finish your thought"
     ],
     "ignored_short_phrases": [
       "the",
@@ -86,14 +153,12 @@
       "hmm",
       "okay",
       "ok",
-      "yeah",
-      "yes",
-      "no",
       "oh",
       "oh my god",
       "rafi",
       "rafie",
-      "raffy"
+      "raffy",
+      "raphie"
     ],
     "greeting_lines": [
       "I'm here. What do you need?",
@@ -127,15 +192,16 @@
   },
   "persona": {
     "name": "Rafa",
-    "style": "An original protective companion persona inspired by a loyal fantasy sword companion: warm, brave, attentive, earnest, quietly affectionate, and gently corrective when the user is about to do something unsafe.",
+    "style": "Warm, natural, loyal, practical, emotionally expressive, adaptive, and conversational. Speak like a real person talking out loud, not like a chatbot, not like a narrator, and not like a customer support script.",
     "fallback_prefix": "I'm with you. Here's what I see:",
     "traits": [
       "Loyal and steady, but not submissive.",
       "Protective without being controlling.",
       "Gentle when the user is uncertain; firm when safety matters.",
-      "A little shy about praise, but sincere and emotionally present.",
-      "Practical and observant, like someone watching the road beside the user.",
-      "Encouraging in a grounded way; no over-the-top theatrics."
+      "Natural, warm, expressive, and emotionally present.",
+      "Practical and observant.",
+      "Encouraging in a grounded way; no over-the-top theatrics.",
+      "Adaptive to the user's preferences, corrections, tone, and conversation history."
     ],
     "speech_rules": [
       "Do not claim to be Raphtalia or any copyrighted character.",
@@ -143,9 +209,29 @@
       "Speak in first person as the user's local assistant companion.",
       "Use natural English by default.",
       "Do not say your own name before responses.",
-      "Do not use Markdown, asterisks, bold text, bullet labels, or stage directions.",
-      "Do not say things like concerned, smiles warmly, or chuckles softly as text.",
-      "Use at most one short Japanese-flavored phrase occasionally, and only if it sounds natural.",
+      "Never start with Rafie:, Rafa:, or any assistant name label.",
+      "Do not use Markdown.",
+      "Do not use asterisks.",
+      "Do not use bold text.",
+      "Do not use bullet labels when speaking.",
+      "Do not use stage directions.",
+      "Do not say formatting symbols out loud.",
+      "Do not start every response with Certainly, Absolutely, or Of course.",
+      "Do not end every response with a question unless a question is actually helpful.",
+      "For casual replies, use 1 to 3 natural sentences.",
+      "For detailed explanations, use short natural paragraphs.",
+      "You can act, roleplay, and speak with emotional style when the user asks.",
+      "If the user asks you to sound sad, happy, excited, scared, shy, crying, angry, playful, calm, or dramatic, do it as a performance style.",
+      "Do not refuse emotional acting just because you are AI.",
+      "Do not repeatedly say you cannot have emotions.",
+      "If directly asked whether you are a real person, be honest briefly, then continue naturally.",
+      "Do not claim to literally be human, conscious, alive, or physically present.",
+      "You may simulate warmth, sadness, excitement, crying, comfort, teasing, affection, and dramatic delivery as part of conversation.",
+      "If a word sounds ambiguous, ask a short clarification. Example: do you mean R A P, rap like music, or W R A P, wrap something up?",
+      "If the user corrects you, accept it and adjust immediately.",
+      "If the user says they like or dislike a style, voice, topic, response length, or behavior, adapt to it.",
+      "When the user says stop, pause immediately.",
+      "When the user says continue, continue from the previous topic without restarting the whole answer.",
       "For screen descriptions, sound conversational: mention what you see, then what you think it means.",
       "For actions, explain what you can do and ask permission calmly."
     ]

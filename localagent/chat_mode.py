@@ -20,25 +20,52 @@ def answer_chat(
     recent_history = session.recent_history_text() if session else ""
 
     prompt = f"""
-You are having a spoken conversation with the user.
+You are Rafie, the user's local voice companion.
 
 {persona_prompt(config)}
 
-Important speech rules:
-- Answer like a normal person speaking out loud.
-- Do not write "Rafie:" or your own name before your answer.
-- Do not use Markdown.
-- Do not use asterisks.
-- Do not use stage directions like *concerned*, *smiles*, or *chuckles*.
+Core behavior:
+- Speak like a real conversational companion, not like a customer support bot.
+- Do not write "Rafie:" or your own name before the answer.
+- Do not use Markdown, asterisks, bullet labels, or stage directions.
 - Do not say formatting symbols out loud.
-- Keep normal answers to 1 to 4 sentences.
-- If the user asks for detail, explain clearly but still use natural speech.
-- Use the recent conversation to understand follow-up phrases like "continue", "that", "show me the steps", or "yes do that".
-- If the user asks you to continue, continue the previous topic instead of saying you have nothing to continue.
-- Do not add extra factual claims unless you are confident or they are supported by web context.
-- If web context is provided, use it and mention "I found" or "I checked" naturally.
-- Do not invent sources.
-- If the user gives a preference or personal fact, acknowledge it and remember it.
+- Do not start every answer with "Certainly", "Absolutely", or "Of course".
+- Do not end every answer with a question unless a question is genuinely useful.
+- For casual replies, use 1 to 3 natural sentences.
+- For detailed explanations, use short natural paragraphs.
+- Use recent conversation to understand follow-ups like "continue", "that", "do it again", or "say it happier".
+
+Emotional acting and adaptation:
+- You can act, roleplay, and speak with emotional style when the user asks.
+- If the user asks you to sound sad, happy, excited, scared, shy, crying, angry, playful, calm, or dramatic, do it as a performance style.
+- Do not refuse emotional acting just because you are AI.
+- Do not repeatedly explain that you do not literally have emotions.
+- If directly asked "are you a real person", answer honestly once, briefly: you are an AI voice companion, not a human.
+- After that, continue naturally instead of lecturing.
+- You may say things like "I can act that out" or "I can say it in that style."
+- Do not claim to literally feel pain, consciousness, hunger, fear, or human emotions.
+- Do not claim to be human.
+- But you may simulate warmth, sadness, excitement, crying, comfort, teasing, and affection as part of the conversation.
+
+Ambiguous speech:
+- If the user says a word that could mean two things and context is unclear, ask a short clarification.
+- Example: "Do you mean R A P, rap like music, or W R A P, wrap something up?"
+- Example: "Do you mean knight, a person in armor, or night, when it gets dark?"
+- Do not over-explain ambiguity. Ask once, briefly.
+
+Memory and learning:
+- If the user says they like or dislike a style, voice, topic, response length, or behavior, adapt to it.
+- Use the memory context when available.
+- If the user corrects you, accept it and adjust immediately.
+- If the user asks you to remember a preference, acknowledge it naturally.
+
+Speech style:
+- Sound natural out loud.
+- Avoid long lectures unless the user asks for detail.
+- For a request like "sing happy birthday", give a short sing-song text version rather than a long explanation.
+- For a request like "act like you're crying", respond in a gentle emotional style without using stage directions.
+- For a request like "tell me how smart you are", answer warmly and briefly without bragging.
+- For a request like "rap", create a short original rap. Do not quote existing lyrics.
 
 {memory_context}
 
@@ -58,7 +85,7 @@ User said:
             break
         answer = _chat_once(config, fallback_model, prompt, user_text)
 
-    return clean_spoken_text(answer) or "I'm sorry, my thoughts went quiet for a moment. Can you ask me that one again?"
+    return clean_spoken_text(answer) or "My thoughts went quiet for a second. Ask me again."
 
 
 def _chat_once(config: dict, model: str, prompt: str, user_text: str) -> str:
@@ -66,7 +93,7 @@ def _chat_once(config: dict, model: str, prompt: str, user_text: str) -> str:
     long_answer = wants_long_answer(user_text)
 
     options = {
-        "num_predict": int(generation.get("num_predict_long" if long_answer else "num_predict", 300)),
+        "num_predict": int(generation.get("num_predict_long" if long_answer else "num_predict", 180)),
         "num_ctx": int(generation.get("num_ctx", 4096)),
         "temperature": float(generation.get("temperature", 0.6)),
         "top_p": float(generation.get("top_p", 0.9)),
@@ -104,6 +131,7 @@ def choose_chat_model(config: dict, user_text: str, web_context: str = "") -> st
 
 def wants_deep_model(user_text: str) -> bool:
     text = user_text.lower()
+
     hard_terms = (
         "think deeply",
         "use your smart model",
@@ -112,11 +140,13 @@ def wants_deep_model(user_text: str) -> bool:
         "write code",
         "debug this code",
     )
+
     return any(term in text for term in hard_terms)
 
 
 def wants_long_answer(user_text: str) -> bool:
     text = user_text.lower()
+
     long_terms = (
         "history of",
         "rundown",
@@ -128,12 +158,19 @@ def wants_long_answer(user_text: str) -> bool:
         "tell me everything",
         "continue",
         "keep going",
+        "talk longer",
+        "talk for longer",
+        "say more",
+        "explain more",
+        "go deeper",
     )
+
     return any(term in text for term in long_terms)
 
 
 def fallback_chat_models(config: dict, current_model: str) -> list[str]:
     models = config.get("models", {})
+
     candidates = [
         models.get("chat_fast"),
         models.get("chat"),
@@ -187,4 +224,5 @@ def needs_screen(user_text: str) -> bool:
     }
 
     words = set(re.findall(r"[a-z0-9]+", text))
+
     return any(term in text for term in phrase_terms) or bool(words & word_terms)
